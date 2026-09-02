@@ -1,0 +1,27 @@
+﻿# Entorno virtual y dependencias
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Variables de entorno y secretos
+.env
+.env.local
+*.key
+
+# Grabaciones de audio temporales
+*.wav
+*.mp3
+*.ogg
+temp/
+logs/
+*.log
+
+# Distribucion y empaquetado
+build/
+dist/
+*.egg-info/
+.pytest_cache/

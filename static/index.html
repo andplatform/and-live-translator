@@ -1,0 +1,556 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>AND Live Translator — Master Broadcast Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #070a12;
+      --card: #111827;
+      --card-alt: #1a2234;
+      --border: #1f293d;
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 24px;
+      min-height: 100vh;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .header-badges {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-online { background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-offline { background: rgba(239, 68, 68, 0.12); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      gap: 24px;
+    }
+    @media(max-width: 1024px) { .grid { grid-template-columns: 1fr; } }
+    
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card:last-child { margin-bottom: 0; }
+    .card h2 {
+      font-size: 13px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .controls-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    button.btn {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+    }
+    button.btn:hover { background: #2d3b55; border-color: #3b82f6; }
+    button.btn.active {
+      background: var(--primary);
+      color: #070a12;
+      border-color: var(--primary);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+    }
+    
+    .form-group {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    input, textarea, select {
+      width: 100%;
+      background: #0b1120;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    /* VU Meter */
+    .vu-wrapper {
+      margin-top: 14px;
+      background: #090e1a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+    .vu-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .vu-track {
+      height: 10px;
+      background: #1e293b;
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+    .vu-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981 0%, #10b981 65%, #f59e0b 85%, #ef4444 100%);
+      transition: width 0.08s ease-out;
+      border-radius: 5px;
+    }
+    
+    .log-box {
+      height: 480px;
+      overflow-y: auto;
+      background: #090e1a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .log-item {
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: #131b2e;
+      border: 1px solid #1e293b;
+      border-left: 4px solid var(--primary);
+      animation: fadeIn 0.25s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .log-meta {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .log-orig {
+      color: #94a3b8;
+      font-size: 13px;
+      font-style: italic;
+    }
+    .log-trans {
+      color: #38bdf8;
+      font-weight: 600;
+      font-size: 15px;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .overlay-link {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px dashed rgba(56, 189, 248, 0.3);
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+    }
+    .overlay-link a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .overlay-link a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>🎙️ AND Live Translator</h1>
+      <span style="font-size: 12px; color: var(--text-dim); background: #1e293b; padding: 3px 8px; border-radius: 6px;">vMix Broadcast Edition</span>
+    </div>
+    <div class="header-badges">
+      <span id="vmixStatus" class="badge badge-offline"><span class="dot"></span> vMix Offline</span>
+      <span id="wsStatus" class="badge badge-online"><span class="dot"></span> Motor Conectado</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Columna Izquierda: Configuración de Señal -->
+    <div>
+      <!-- Modo de Realización -->
+      <div class="card">
+        <h2>Modo de Salida en Directo</h2>
+        <div class="controls-row">
+          <button class="btn active" onclick="setMode('all')">📺 Todo (Sub + Voz)</button>
+          <button class="btn" onclick="setMode('voice_ducking')">🎙️ Mix con Ducking</button>
+          <button class="btn" onclick="setMode('voice_only')">🗣️ Solo Doblaje</button>
+          <button class="btn" onclick="setMode('subtitles_only')">💬 Solo Subtítulos</button>
+        </div>
+      </div>
+
+      <!-- Ruteo de Audio y Tarjetas de Sonido -->
+      <div class="card">
+        <h2>Ruteo de Audio y Dispositivos</h2>
+        <div class="form-group">
+          <label>Entrada del Ponente (Micro / Cable Virtual):</label>
+          <select id="audioInSelect" onchange="onAudioDeviceChange()"></select>
+        </div>
+        <div class="form-group">
+          <label>Salida para vMix (Doblaje / Altavoces):</label>
+          <select id="audioOutSelect" onchange="onAudioDeviceChange()"></select>
+        </div>
+        <div class="form-group">
+          <label>Idioma de Entrada:</label>
+          <select id="sourceLangSelect" onchange="onLanguageChange()"></select>
+        </div>
+
+        <!-- VU Meter -->
+        <div class="vu-wrapper">
+          <div class="vu-header">
+            <span>Nivel de Audio en Vivo (VAD)</span>
+            <span id="vuValue">0%</span>
+          </div>
+          <div class="vu-track">
+            <div id="vuBar" class="vu-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Glosario y Contexto Anti-Alucinación -->
+      <div class="card">
+        <h2>Glosario Anti-Alucinación</h2>
+        <div class="form-group">
+          <label>Nombres propios, marcas y términos del programa:</label>
+          <textarea id="glossaryInput" rows="3" placeholder="vMix, NDI, Jackie, Manu Gordillo, Almería..."></textarea>
+        </div>
+        <button class="btn" style="width: 100%; background: var(--primary); color: #070a12;" onclick="saveGlossary()">💾 Guardar Glosario</button>
+      </div>
+
+      <!-- Integración vMix -->
+      <div class="card">
+        <h2>Conexión vMix API</h2>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>Input Title vMix:</label>
+            <input type="text" id="vmixInputName" value="Subtitulos">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label>Campo de Texto:</label>
+            <input type="text" id="vmixFieldName" value="Headline.Text">
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" style="flex: 1;" onclick="saveVmixConfig()">Actualizar Destino</button>
+          <button class="btn" style="flex: 1;" onclick="testSamplePhrase()">🧪 Probar Rótulo</button>
+        </div>
+
+        <div class="overlay-link">
+          <span>Rótulo Web Browser Input:</span>
+          <a href="/overlay" target="_blank">http://127.0.0.1:17494/overlay</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columna Derecha: Monitor en Vivo -->
+    <div>
+      <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+        <h2>
+          <span>Monitor de Traducción en Directo</span>
+          <span id="phraseCounter" style="font-size: 11px; color: var(--text-dim); text-transform: none;">0 frases procesadas</span>
+        </h2>
+        <div id="logBox" class="log-box" style="flex: 1;">
+          <div style="color: var(--text-dim); text-align: center; margin-top: 180px;">
+            Esperando señal acústica del orador...
+          </div>
+        </div>
+        <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-dim);">
+          <span id="latencyDisplay">⏱️ Latencia: -- ms</span>
+          <button class="btn" style="padding: 6px 12px; font-size: 11px;" onclick="clearLog()">Limpiar Monitor</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const logBox = document.getElementById("logBox");
+    const vmixStatus = document.getElementById("vmixStatus");
+    const latencyDisplay = document.getElementById("latencyDisplay");
+    const phraseCounter = document.getElementById("phraseCounter");
+    const vuBar = document.getElementById("vuBar");
+    const vuValue = document.getElementById("vuValue");
+    
+    let totalPhrases = 0;
+    let hasEntries = false;
+
+    async function loadConfig() {
+      try {
+        const res = await fetch("/api/config");
+        const data = await res.json();
+        document.getElementById("glossaryInput").value = (data.glossary || []).join(", ");
+        document.getElementById("vmixInputName").value = data.vmix_title_input;
+        document.getElementById("vmixFieldName").value = data.vmix_title_field;
+        updateModeButtons(data.operation_mode);
+
+        // Cargar idiomas
+        const langSelect = document.getElementById("sourceLangSelect");
+        langSelect.innerHTML = "";
+        for (const [code, name] of Object.entries(data.supported_languages || {})) {
+          const opt = document.createElement("option");
+          opt.value = code;
+          opt.textContent = name;
+          if (code === data.source_lang) opt.selected = true;
+          langSelect.appendChild(opt);
+        }
+      } catch (e) {}
+    }
+
+    async function loadAudioDevices() {
+      try {
+        const res = await fetch("/api/audio-devices");
+        const data = await res.json();
+        
+        const inSelect = document.getElementById("audioInSelect");
+        inSelect.innerHTML = "<option value=''>-- Dispositivo Predeterminado de Windows --</option>";
+        data.inputs.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = [] ;
+          if (String(data.current_input) === String(d.id) || String(data.current_input) === d.name) {
+            opt.selected = true;
+          }
+          inSelect.appendChild(opt);
+        });
+
+        const outSelect = document.getElementById("audioOutSelect");
+        outSelect.innerHTML = "<option value=''>-- Dispositivo Predeterminado de Windows --</option>";
+        data.outputs.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = [] ;
+          if (String(data.current_output) === String(d.id) || String(data.current_output) === d.name) {
+            opt.selected = true;
+          }
+          outSelect.appendChild(opt);
+        });
+      } catch (e) {}
+    }
+
+    async function onAudioDeviceChange() {
+      const inVal = document.getElementById("audioInSelect").value;
+      const outVal = document.getElementById("audioOutSelect").value;
+      await fetch("/api/audio-devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input_device: inVal !== "" ? inVal : null,
+          output_device: outVal !== "" ? outVal : null
+        })
+      });
+    }
+
+    async function onLanguageChange() {
+      const src = document.getElementById("sourceLangSelect").value;
+      await fetch("/api/language", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_lang: src, target_lang: "es" })
+      });
+    }
+
+    async function checkVmix() {
+      try {
+        const res = await fetch("/api/vmix-status");
+        const data = await res.json();
+        if (data.online) {
+          vmixStatus.className = "badge badge-online";
+          vmixStatus.innerHTML = "<span class='dot'></span> vMix Online";
+        } else {
+          vmixStatus.className = "badge badge-offline";
+          vmixStatus.innerHTML = "<span class='dot'></span> vMix Offline (8088)";
+        }
+      } catch (e) {}
+    }
+
+    function updateModeButtons(mode) {
+      document.querySelectorAll(".controls-row button").forEach(btn => btn.classList.remove("active"));
+      const target = Array.from(document.querySelectorAll(".controls-row button")).find(b => b.getAttribute("onclick").includes(mode));
+      if (target) target.classList.add("active");
+    }
+
+    async function setMode(mode) {
+      updateModeButtons(mode);
+      await fetch("/api/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode })
+      });
+    }
+
+    async function saveGlossary() {
+      const raw = document.getElementById("glossaryInput").value;
+      const glossary = raw.split(",").map(s => s.trim()).filter(Boolean);
+      await fetch("/api/glossary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ glossary })
+      });
+      alert("Glosario actualizado y activo en el reconocedor.");
+    }
+
+    async function saveVmixConfig() {
+      const vmix_title_input = document.getElementById("vmixInputName").value.trim();
+      const vmix_title_field = document.getElementById("vmixFieldName").value.trim();
+      await fetch("/api/vmix-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vmix_title_input, vmix_title_field })
+      });
+      alert("Configuración de vMix guardada.");
+    }
+
+    async function testSamplePhrase() {
+      await fetch("/api/test-phrase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Welcome to the live broadcast with Manu Gordillo using vMix and NDI." })
+      });
+    }
+
+    function clearLog() {
+      logBox.innerHTML = "";
+      hasEntries = false;
+      totalPhrases = 0;
+      phraseCounter.textContent = "0 frases procesadas";
+    }
+
+    function connectWs() {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(proto + "//" + window.location.host + "/ws");
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === "vu") {
+            const lvl = Math.min(100, Math.max(0, data.level));
+            vuBar.style.width = lvl + "%";
+            vuValue.textContent = lvl + "%";
+            return;
+          }
+
+          if (data.type === "translation" && data.translated) {
+            if (!hasEntries) {
+              logBox.innerHTML = "";
+              hasEntries = true;
+            }
+            totalPhrases++;
+            phraseCounter.textContent = ${totalPhrases} frases procesadas;
+
+            const item = document.createElement("div");
+            item.className = "log-item";
+            item.innerHTML = 
+              <div class="log-meta">
+                <span>🕒 </span>
+                <span>⚡  ms</span>
+              </div>
+              <div class="log-orig"></div>
+              <div class="log-trans">🗣️ </div>
+            ;
+            logBox.appendChild(item);
+            logBox.scrollTop = logBox.scrollHeight;
+            latencyDisplay.textContent = ⏱️ Latencia:  ms;
+          }
+        } catch (e) {}
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWs, 2000);
+      };
+    }
+
+    loadConfig();
+    loadAudioDevices();
+    checkVmix();
+    setInterval(checkVmix, 5000);
+    connectWs();
+  </script>
+</body>
+</html>
