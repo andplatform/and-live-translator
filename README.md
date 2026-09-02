@@ -1,4 +1,4 @@
-﻿# 🎙️ AND Live Translator (vMix Broadcast Edition)
+# 🎙️ AND Live Translator (vMix Broadcast Edition)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
@@ -82,7 +82,7 @@ En programas de televisión, directos y eventos con ponentes internacionales que
 
 ### 1. Clonar el Repositorio
 `ash
-git clone https://github.com/END-CENTER/and-live-translator.git
+git clone https://github.com/andplatform/and-live-translator.git
 cd and-live-translator
 `
 

@@ -1,4 +1,4 @@
-﻿[build-system]
+[build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
@@ -40,7 +40,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/END-CENTER/and-live-translator"
-Documentation = "https://github.com/END-CENTER/and-live-translator#readme"
-Repository = "https://github.com/END-CENTER/and-live-translator.git"
-Issues = "https://github.com/END-CENTER/and-live-translator/issues"
+Homepage = "https://github.com/andplatform/and-live-translator"
+Documentation = "https://github.com/andplatform/and-live-translator#readme"
+Repository = "https://github.com/andplatform/and-live-translator.git"
+Issues = "https://github.com/andplatform/and-live-translator/issues"
