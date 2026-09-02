@@ -17,6 +17,7 @@
       --success: #10b981;
       --danger: #ef4444;
       --warning: #f59e0b;
+      --orange: #ff6b00;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -38,6 +39,12 @@
       display: flex;
       align-items: center;
       gap: 14px;
+    }
+    .header-left img {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
     }
     .header h1 {
       font-size: 20px;
@@ -66,7 +73,7 @@
     
     .grid {
       display: grid;
-      grid-template-columns: 460px 1fr;
+      grid-template-columns: 480px 1fr;
       gap: 24px;
     }
     @media(max-width: 1024px) { .grid { grid-template-columns: 1fr; } }
@@ -146,6 +153,42 @@
       border-color: var(--primary);
     }
 
+    /* Multi-Language Matrix */
+    .lang-matrix {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .lang-channel {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0b1120;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+    .lang-tag {
+      font-weight: 700;
+      color: var(--primary);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .copy-btn {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { color: var(--text); background: #334155; }
+
     /* VU Meter */
     .vu-wrapper {
       margin-top: 14px;
@@ -177,7 +220,7 @@
     }
     
     .log-box {
-      height: 480px;
+      height: 520px;
       overflow-y: auto;
       background: #090e1a;
       border: 1px solid var(--border);
@@ -185,10 +228,10 @@
       padding: 14px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
     }
     .log-item {
-      padding: 12px 16px;
+      padding: 14px 18px;
       border-radius: 8px;
       background: #131b2e;
       border: 1px solid #1e293b;
@@ -202,7 +245,7 @@
     .log-meta {
       font-size: 11px;
       color: var(--text-dim);
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       display: flex;
       justify-content: space-between;
     }
@@ -210,41 +253,50 @@
       color: #94a3b8;
       font-size: 13px;
       font-style: italic;
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
-    .log-trans {
+    .log-translations-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .trans-row {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      font-size: 14px;
+    }
+    .trans-code {
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .trans-text {
+      color: #f8fafc;
+      font-weight: 500;
+    }
+    .trans-row.primary .trans-text {
       color: #38bdf8;
       font-weight: 600;
       font-size: 15px;
-      margin-top: 4px;
-      line-height: 1.4;
     }
-
-    .overlay-link {
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px dashed rgba(56, 189, 248, 0.3);
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      color: var(--text-dim);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 14px;
-    }
-    .overlay-link a {
-      color: var(--primary);
-      text-decoration: none;
-      font-weight: 600;
-      word-break: break-all;
-    }
-    .overlay-link a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="header-left">
-      <h1>🎙️ AND Live Translator</h1>
-      <span style="font-size: 12px; color: var(--text-dim); background: #1e293b; padding: 3px 8px; border-radius: 6px;">vMix Broadcast Edition</span>
+      <img src="/assets/avatar.jpg" alt="Logo" onerror="this.style.display='none'">
+      <div>
+        <h1>🎙️ AND Live Translator</h1>
+        <span style="font-size: 12px; color: var(--text-dim);">Multi-Channel Broadcast Edition • vMix & OBS</span>
+      </div>
     </div>
     <div class="header-badges">
       <span id="vmixStatus" class="badge badge-offline"><span class="dot"></span> vMix Offline</span>
@@ -268,7 +320,7 @@
 
       <!-- Ruteo de Audio y Tarjetas de Sonido -->
       <div class="card">
-        <h2>Ruteo de Audio y Dispositivos</h2>
+        <h2>Ruteo de Audio I/O</h2>
         <div class="form-group">
           <label>Entrada del Ponente (Micro / Cable Virtual):</label>
           <select id="audioInSelect" onchange="onAudioDeviceChange()"></select>
@@ -278,8 +330,12 @@
           <select id="audioOutSelect" onchange="onAudioDeviceChange()"></select>
         </div>
         <div class="form-group">
-          <label>Idioma de Entrada:</label>
+          <label>Idioma del Ponente (Entrada):</label>
           <select id="sourceLangSelect" onchange="onLanguageChange()"></select>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button class="btn" style="flex: 1;" onclick="testVoiceOutput()">🔊 Probar Voz Doblada</button>
         </div>
 
         <!-- VU Meter -->
@@ -294,6 +350,36 @@
         </div>
       </div>
 
+      <!-- Matriz de Salidas Multi-Idioma para vMix -->
+      <div class="card">
+        <h2>Canales de Emisión Simultáneos</h2>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 12px;">
+          Cada URL se añade como un <b>Input Web Browser</b> independiente en vMix:
+        </p>
+        <div class="lang-matrix">
+          <div class="lang-channel active">
+            <span class="lang-tag">🇪🇸 Canal Español (es)</span>
+            <button class="copy-btn" onclick="copyOverlayUrl('es')">Copiar URL vMix</button>
+          </div>
+          <div class="lang-channel active">
+            <span class="lang-tag">🇬🇧 Canal Inglés (en)</span>
+            <button class="copy-btn" onclick="copyOverlayUrl('en')">Copiar URL vMix</button>
+          </div>
+          <div class="lang-channel active">
+            <span class="lang-tag">🇫🇷 Canal Francés (fr)</span>
+            <button class="copy-btn" onclick="copyOverlayUrl('fr')">Copiar URL vMix</button>
+          </div>
+          <div class="lang-channel active">
+            <span class="lang-tag">🇩🇪 Canal Alemán (de)</span>
+            <button class="copy-btn" onclick="copyOverlayUrl('de')">Copiar URL vMix</button>
+          </div>
+          <div class="lang-channel">
+            <span class="lang-tag">🔄 Modo Dual (Traducción + Original)</span>
+            <button class="copy-btn" onclick="copyOverlayUrl('es', true)">Copiar URL Dual</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Glosario y Contexto Anti-Alucinación -->
       <div class="card">
         <h2>Glosario Anti-Alucinación</h2>
@@ -304,9 +390,15 @@
         <button class="btn" style="width: 100%; background: var(--primary); color: #070a12;" onclick="saveGlossary()">💾 Guardar Glosario</button>
       </div>
 
-      <!-- Integración vMix -->
+      <!-- Integración vMix API (Doble vía: Selector en vivo + Manual) -->
       <div class="card">
-        <h2>Conexión vMix API</h2>
+        <h2>Conexión vMix API (GT Title)</h2>
+        <div class="form-group">
+          <label>Detectar Entrada GT Title en vMix:</label>
+          <select id="vmixInputsDropdown" onchange="onVmixInputSelected()">
+            <option value="">-- Buscar entradas activas en vMix... --</option>
+          </select>
+        </div>
         <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
           <div class="form-group" style="margin-bottom: 0;">
             <label>Input Title vMix:</label>
@@ -318,31 +410,26 @@
           </div>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn" style="flex: 1;" onclick="saveVmixConfig()">Actualizar Destino</button>
+          <button class="btn" style="flex: 1;" onclick="saveVmixConfig()">Guardar Destino</button>
           <button class="btn" style="flex: 1;" onclick="testSamplePhrase()">🧪 Probar Rótulo</button>
-        </div>
-
-        <div class="overlay-link">
-          <span>Rótulo Web Browser Input:</span>
-          <a href="/overlay" target="_blank">http://127.0.0.1:17494/overlay</a>
         </div>
       </div>
     </div>
 
-    <!-- Columna Derecha: Monitor en Vivo -->
+    <!-- Columna Derecha: Monitor Multi-Idioma en Vivo -->
     <div>
       <div class="card" style="height: 100%; display: flex; flex-direction: column;">
         <h2>
-          <span>Monitor de Traducción en Directo</span>
+          <span>Monitor Multi-Canal en Directo</span>
           <span id="phraseCounter" style="font-size: 11px; color: var(--text-dim); text-transform: none;">0 frases procesadas</span>
         </h2>
         <div id="logBox" class="log-box" style="flex: 1;">
-          <div style="color: var(--text-dim); text-align: center; margin-top: 180px;">
+          <div style="color: var(--text-dim); text-align: center; margin-top: 220px;">
             Esperando señal acústica del orador...
           </div>
         </div>
         <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-dim);">
-          <span id="latencyDisplay">⏱️ Latencia: -- ms</span>
+          <span id="latencyDisplay">⏱️ Latencia de proceso: -- ms</span>
           <button class="btn" style="padding: 6px 12px; font-size: 11px;" onclick="clearLog()">Limpiar Monitor</button>
         </div>
       </div>
@@ -356,9 +443,16 @@
     const phraseCounter = document.getElementById("phraseCounter");
     const vuBar = document.getElementById("vuBar");
     const vuValue = document.getElementById("vuValue");
+    const vmixInputsDropdown = document.getElementById("vmixInputsDropdown");
     
     let totalPhrases = 0;
     let hasEntries = false;
+
+    function copyOverlayUrl(lang, isDual = false) {
+      const base = window.location.origin + "/overlay?lang=" + lang + (isDual ? "&dual=1" : "");
+      navigator.clipboard.writeText(base);
+      alert("URL copiada al portapapeles:\n" + base + "\n\nPégala en vMix como Input -> Web Browser.");
+    }
 
     async function loadConfig() {
       try {
@@ -369,7 +463,6 @@
         document.getElementById("vmixFieldName").value = data.vmix_title_field;
         updateModeButtons(data.operation_mode);
 
-        // Cargar idiomas
         const langSelect = document.getElementById("sourceLangSelect");
         langSelect.innerHTML = "";
         for (const [code, name] of Object.entries(data.supported_languages || {})) {
@@ -413,6 +506,33 @@
       } catch (e) {}
     }
 
+    async function loadVmixInputs() {
+      try {
+        const res = await fetch("/api/vmix-inputs");
+        const data = await res.json();
+        if (data.inputs && data.inputs.length > 0) {
+          vmixInputsDropdown.innerHTML = "<option value=''>-- Seleccionar Rótulo de vMix --</option>";
+          data.inputs.forEach(inp => {
+            const opt = document.createElement("option");
+            opt.value = inp.title || inp.shortTitle || inp.number;
+            opt.textContent = []  ();
+            if (inp.title === document.getElementById("vmixInputName").value) {
+              opt.selected = true;
+            }
+            vmixInputsDropdown.appendChild(opt);
+          });
+        }
+      } catch (e) {}
+    }
+
+    function onVmixInputSelected() {
+      const selected = vmixInputsDropdown.value;
+      if (selected) {
+        document.getElementById("vmixInputName").value = selected;
+        saveVmixConfig();
+      }
+    }
+
     async function onAudioDeviceChange() {
       const inVal = document.getElementById("audioInSelect").value;
       const outVal = document.getElementById("audioOutSelect").value;
@@ -442,6 +562,7 @@
         if (data.online) {
           vmixStatus.className = "badge badge-online";
           vmixStatus.innerHTML = "<span class='dot'></span> vMix Online";
+          loadVmixInputs();
         } else {
           vmixStatus.className = "badge badge-offline";
           vmixStatus.innerHTML = "<span class='dot'></span> vMix Offline (8088)";
@@ -472,7 +593,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ glossary })
       });
-      alert("Glosario actualizado y activo en el reconocedor.");
+      alert("Glosario actualizado y guardado.");
     }
 
     async function saveVmixConfig() {
@@ -483,15 +604,28 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vmix_title_input, vmix_title_field })
       });
-      alert("Configuración de vMix guardada.");
     }
 
     async function testSamplePhrase() {
       await fetch("/api/test-phrase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Welcome to the live broadcast with Manu Gordillo using vMix and NDI." })
+        body: JSON.stringify({ text: "Good evening to our broadcast from Almeria, today Manu Gordillo will test vMix and NDI." })
       });
+    }
+
+    async function testVoiceOutput() {
+      const res = await fetch("/api/test-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Prueba de doblaje en directo. El sistema de audio está funcionando correctamente." })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Audio reproducido con éxito por la salida configurada.");
+      } else {
+        alert("Error reproduciendo audio: " + (data.error || "desconocido"));
+      }
     }
 
     function clearLog() {
@@ -503,7 +637,7 @@
 
     function connectWs() {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(proto + "//" + window.location.host + "/ws");
+      const ws = new WebSocket(proto + "//" + window.location.host + "/ws?lang=es");
 
       ws.onmessage = (event) => {
         try {
@@ -516,7 +650,7 @@
             return;
           }
 
-          if (data.type === "translation" && data.translated) {
+          if (data.type === "translation") {
             if (!hasEntries) {
               logBox.innerHTML = "";
               hasEntries = true;
@@ -526,13 +660,31 @@
 
             const item = document.createElement("div");
             item.className = "log-item";
+            
+            let translationsHtml = "";
+            if (data.translations && Object.keys(data.translations).length > 0) {
+              for (const [l, text] of Object.entries(data.translations)) {
+                const isPrimary = l === "es";
+                translationsHtml += 
+                  <div class="trans-row ">
+                    <span class="trans-code"></span>
+                    <span class="trans-text"></span>
+                  </div>
+                ;
+              }
+            } else {
+              translationsHtml = <div class="trans-row primary"><span class="trans-code">es</span><span class="trans-text"></span></div>;
+            }
+
             item.innerHTML = 
               <div class="log-meta">
                 <span>🕒 </span>
                 <span>⚡  ms</span>
               </div>
-              <div class="log-orig"></div>
-              <div class="log-trans">🗣️ </div>
+              <div class="log-orig">🗣️ Original: </div>
+              <div class="log-translations-grid">
+                
+              </div>
             ;
             logBox.appendChild(item);
             logBox.scrollTop = logBox.scrollHeight;

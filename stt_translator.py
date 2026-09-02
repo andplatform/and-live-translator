@@ -1,11 +1,71 @@
 ﻿import io
+import re
 import time
 import logging
+import asyncio
 import numpy as np
 import scipy.io.wavfile as wavfile
 from config import settings
 
 logger = logging.getLogger("stt_translator")
+
+LANGUAGE_NAMES = {
+    "es": "español",
+    "en": "inglés",
+    "fr": "francés",
+    "de": "alemán",
+    "it": "italiano",
+    "pt": "portugués",
+    "zh": "chino mandarín",
+    "ja": "japonés",
+    "ru": "ruso",
+    "ar": "árabe",
+    "nl": "holandés"
+}
+
+def clean_translation_text(raw: str) -> str:
+    """Elimina metadatos de modelos de razonamiento (Groq/Qwen/Llama), etiquetas think y prefijos."""
+    if not raw:
+        return ""
+
+    # 1. Eliminar etiquetas <think>...</think> si existen
+    cleaned = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL)
+
+    # 2. Cortar si el modelo añade secciones de razonamiento o notas
+    lower_c = cleaned.lower()
+    cut_tokens = [
+        "**raisonnement**", "**explication**", "**explicación**", 
+        "**reasoning**", "**notas**", "**notes**", "raisonnement:", "explication:"
+    ]
+    for token in cut_tokens:
+        idx = lower_c.find(token)
+        if idx != -1:
+            cleaned = cleaned[:idx]
+            lower_c = cleaned.lower()
+
+    # 3. Extraer la línea de traducción real
+    lines = [l.strip() for l in cleaned.split("\n") if l.strip()]
+    candidate = ""
+    for line in lines:
+        # Remover prefijos como 'Traduction:', '**Traduction**:', 'Traducción:'
+        clean_line = re.sub(r'^(\*\*|#)*\s*(traduction|traducción|translation|übersetzung)\s*(\*\*|#)*\s*[:\-\*]*\s*', '', line, flags=re.IGNORECASE).strip()
+        if clean_line and not clean_line.startswith("**") and not clean_line.startswith("#"):
+            candidate = clean_line
+            break
+
+    if not candidate and lines:
+        candidate = lines[0]
+
+    # 4. Normalizar espacios tipográficos no separables (evita fallos de render en broadcast)
+    final = (
+        candidate.replace('\u202f', ' ')
+                 .replace('\xa0', ' ')
+                 .strip()
+                 .strip('\"')
+                 .strip('\'')
+                 .strip('*')
+    )
+    return final
 
 class STTTranslator:
     def __init__(self):
@@ -20,7 +80,8 @@ class STTTranslator:
                 logger.warning(f"No se pudo inicializar Groq: {e}")
 
     def _audio_to_wav_bytes(self, audio_data: np.ndarray, sample_rate: int = 16000) -> bytes:
-        scaled = np.int16(audio_data / np.max(np.abs(audio_data) + 1e-6) * 32767)
+        # Conversión directa Float32 a Int16 preservando headroom natural (sin amplificar ruido de fondo)
+        scaled = np.clip(audio_data * 32767.0, -32768, 32767).astype(np.int16)
         buffer = io.BytesIO()
         wavfile.write(buffer, sample_rate, scaled)
         buffer.seek(0)
@@ -48,18 +109,20 @@ class STTTranslator:
 
         return ""
 
-    async def translate(self, text: str) -> str:
+    async def translate_to_lang(self, text: str, target_lang: str) -> str:
         if not text or len(text.strip()) == 0:
             return ""
 
-        if settings.source_lang == settings.target_lang:
+        if settings.source_lang == target_lang:
             return text
 
+        lang_name = LANGUAGE_NAMES.get(target_lang, target_lang)
         system_prompt = (
-            "Eres un interprete simultaneo de television en directo para un canal en espanol. "
-            "Traduce la frase al espanol de forma natural, directa y breve para rotulos televisivos y doblaje. "
+            f"Eres un interprete simultaneo de television en directo. "
+            f"Traduce la frase al {lang_name} de forma natural, directa y breve para rotulos televisivos y subtitulos. "
             "Respeta escrupulosamente nombres propios, marcas y terminos tecnicos. "
-            "IMPORTANTE: Devuelve UNICA Y EXCLUSIVAMENTE la frase traducida, sin explicaciones, sin comillas ni notas adicionales.\n"
+            "REGLA ESTRICTA: Devuelve UNICA Y EXCLUSIVAMENTE una sola linea con la frase traducida. "
+            "Prohibido incluir notas, comentarios, razonamientos o encabezados como 'Traduction:'.\n"
             f"Glosario: {', '.join(settings.glossary)}"
         )
 
@@ -71,39 +134,52 @@ class STTTranslator:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": text}
                     ],
-                    temperature=0.1,
+                    temperature=0.0,
                     max_tokens=150,
                 )
                 raw = response.choices[0].message.content
                 if raw:
-                    # Normalizar espacios no separables tipograficos a espacios estándar
-                    clean = (
-                        raw.replace('\u202f', ' ')
-                           .replace('\xa0', ' ')
-                           .strip()
-                           .strip('\"')
-                           .strip('\'')
-                           .strip('*')
-                    )
-                    return clean
+                    return clean_translation_text(raw)
             except Exception as e:
-                logger.warning(f"[Translation Groq Error]: {e}")
+                logger.warning(f"[Translation Groq Error {target_lang}]: {e}")
 
         return text
 
-    async def process_chunk(self, audio_chunk: np.ndarray, sample_rate: int = 16000) -> dict:
+    async def translate_multi(self, text: str, target_langs: list[str]) -> dict[str, str]:
+        """Traduce concurrentemente la misma frase a múltiples idiomas en paralelo."""
+        if not text:
+            return {}
+
+        tasks = [self.translate_to_lang(text, lang) for lang in target_langs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        output = {}
+        for lang, res in zip(target_langs, results):
+            if isinstance(res, str):
+                output[lang] = res
+            else:
+                output[lang] = text
+        return output
+
+    async def translate(self, text: str) -> str:
+        return await self.translate_to_lang(text, settings.target_lang)
+
+    async def process_chunk_multi(self, audio_chunk: np.ndarray, target_langs: list[str], sample_rate: int = 16000) -> dict:
         t0 = time.perf_counter()
         original_text = await self.transcribe(audio_chunk, sample_rate)
         if not original_text:
-            return {"original": "", "translated": "", "latency_ms": 0}
+            return {"original": "", "translations": {}, "latency_ms": 0}
 
-        translated_text = await self.translate(original_text)
+        translations = await self.translate_multi(original_text, target_langs)
         t1 = time.perf_counter()
         latency_ms = int((t1 - t0) * 1000)
 
-        logger.info(f"[{latency_ms}ms] '{original_text}' -> '{translated_text}'")
+        primary_translated = translations.get(settings.target_lang, next(iter(translations.values()), original_text))
+        logger.info(f"[{latency_ms}ms] '{original_text}' -> {translations}")
+
         return {
             "original": original_text,
-            "translated": translated_text,
+            "translations": translations,
+            "translated": primary_translated,
             "latency_ms": latency_ms
         }

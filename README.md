@@ -1,12 +1,19 @@
 # 🎙️ AND Live Translator (vMix Broadcast Edition)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![vMix Compatible](https://img.shields.io/badge/vMix-24%20--%2027+-red.svg)](https://www.vmix.com/)
-[![OBS Studio](https://img.shields.io/badge/OBS%20Studio-Compatible-purple.svg)](https://obsproject.com/)
-[![Latency](https://img.shields.io/badge/Latency-%3C150ms-brightgreen.svg)]()
+<p align="center">
+  <img src="assets/banner.jpg" alt="AND Live Translator Banner" width="100%" style="border-radius: 10px;">
+</p>
 
-> **Motor profesional de traducción en tiempo real, subtitulado dinámico y doblaje simultáneo (Speech-to-Speech) para realización en directo con vMix y OBS Studio.**
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
+  <a href="https://www.vmix.com/"><img src="https://img.shields.io/badge/vMix-24%20--%2027+-red.svg" alt="vMix Compatible"></a>
+  <a href="https://obsproject.com/"><img src="https://img.shields.io/badge/OBS%20Studio-Compatible-purple.svg" alt="OBS Studio"></a>
+  <img src="https://img.shields.io/badge/Latency-%3C150ms-brightgreen.svg" alt="Latency <150ms">
+  <img src="https://img.shields.io/badge/Multi--Language-Concurrent%20Channels-orange.svg" alt="Multi-Language">
+</p>
+
+> **Motor profesional de traducción en tiempo real, subtitulado dinámico multi-canal y doblaje simultáneo (Speech-to-Speech) para realización en directo con vMix y OBS Studio.**
 
 ---
 

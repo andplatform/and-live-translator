@@ -1,4 +1,5 @@
 ﻿import os
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -7,6 +8,7 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 env_local_path = ROOT_DIR / ".env.local"
 service_env = Path(__file__).resolve().parent / ".env"
+PERSISTENT_CONFIG_FILE = Path(__file__).resolve().parent / "config.json"
 
 if service_env.exists():
     load_dotenv(dotenv_path=service_env, override=False)
@@ -47,6 +49,7 @@ class TranslatorSettings(BaseModel):
     # Languages
     source_lang: str = Field(default=os.getenv("TRANSLATOR_SOURCE_LANG", "en"))
     target_lang: str = Field(default=os.getenv("TRANSLATOR_TARGET_LANG", "es"))
+    active_target_languages: list[str] = Field(default=["es", "en", "fr", "de"])
 
     # Glossary / Contextual Prompt to eliminate hallucinations
     glossary: list[str] = Field(default=[
@@ -67,4 +70,38 @@ class TranslatorSettings(BaseModel):
     # Web UI / Overlay Server Port
     server_port: int = 17494
 
-settings = TranslatorSettings()
+    def save_persistent(self):
+        """Guarda la configuración persistente en config.json (sin almacenar claves de API en claro)."""
+        data = {
+            "vmix_host": self.vmix_host,
+            "vmix_port": self.vmix_port,
+            "vmix_title_input": self.vmix_title_input,
+            "vmix_title_field": self.vmix_title_field,
+            "input_device": self.input_device,
+            "output_device": self.output_device,
+            "source_lang": self.source_lang,
+            "target_lang": self.target_lang,
+            "active_target_languages": self.active_target_languages,
+            "glossary": self.glossary,
+            "operation_mode": self.operation_mode
+        }
+        try:
+            with open(PERSISTENT_CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            pass
+
+def load_settings() -> TranslatorSettings:
+    s = TranslatorSettings()
+    if PERSISTENT_CONFIG_FILE.exists():
+        try:
+            with open(PERSISTENT_CONFIG_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                for k, v in saved.items():
+                    if hasattr(s, k):
+                        setattr(s, k, v)
+        except Exception:
+            pass
+    return s
+
+settings = load_settings()
