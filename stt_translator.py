@@ -29,17 +29,38 @@ LANGUAGE_NAMES = {
 CONTEXT_WINDOW_SIZE = 4
 
 def clean_translation_text(raw: str) -> str:
-    """Elimina metadatos de modelos de razonamiento (Groq/Qwen/Llama), etiquetas think y prefijos."""
+    """
+    Limpia la salida del LLM:
+    - Elimina etiquetas <think>...</think>
+    - Elimina artefactos conversacionales ([Note:...], [END OF CONVERSATION], etc.)
+    - Extrae la primera línea de traducción real
+    - Normaliza espacios tipográficos
+    """
     if not raw:
         return ""
 
-    # 1. Eliminar etiquetas <think>...</think> si existen
+    # 1. Eliminar etiquetas <think>...</think>
     cleaned = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL)
 
-    # 2. Cortar si el modelo añade secciones de razonamiento o notas
+    # 2. Eliminar artefactos de modelos conversacionales que responden al contenido
+    #    en lugar de traducirlo (allam-2-7b es propenso a esto)
+    ai_artifact_patterns = [
+        r'\[Note:.*?\]',                   # [Note: If you need help...]
+        r'\[END OF CONVERSATION\]',        # [END OF CONVERSATION]
+        r'\[Translation:.*?\]',            # [Translation: ...]
+        r'\[Nota:.*?\]',                   # [Nota: ...]
+        r'\[Note\s*\(.*?\):.*?\]',         # [Note (context): ...]
+        r'\(Note:.*?\)',                   # (Note: ...)
+        r'\*Note:.*$',                     # *Note: ... al final de línea
+        r'Note:.*$',                       # Note: ... línea entera
+    ]
+    for pattern in ai_artifact_patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL).strip()
+
+    # 3. Cortar si el modelo añade secciones de razonamiento
     lower_c = cleaned.lower()
     cut_tokens = [
-        "**raisonnement**", "**explication**", "**explicación**", 
+        "**raisonnement**", "**explication**", "**explicación**",
         "**reasoning**", "**notas**", "**notes**", "raisonnement:", "explication:"
     ]
     for token in cut_tokens:
@@ -48,11 +69,14 @@ def clean_translation_text(raw: str) -> str:
             cleaned = cleaned[:idx]
             lower_c = cleaned.lower()
 
-    # 3. Extraer la línea de traducción real
+    # 4. Extraer la primera línea de traducción real
     lines = [l.strip() for l in cleaned.split("\n") if l.strip()]
     candidate = ""
     for line in lines:
-        clean_line = re.sub(r'^(\*\*|#)*\s*(traduction|traducción|translation|übersetzung)\s*(\*\*|#)*\s*[:\-\*]*\s*', '', line, flags=re.IGNORECASE).strip()
+        clean_line = re.sub(
+            r'^(\*\*|#)*\s*(traduction|traducción|translation|übersetzung)\s*(\*\*|#)*\s*[:\-\*]*\s*',
+            '', line, flags=re.IGNORECASE
+        ).strip()
         if clean_line and not clean_line.startswith("**") and not clean_line.startswith("#"):
             candidate = clean_line
             break
@@ -60,7 +84,7 @@ def clean_translation_text(raw: str) -> str:
     if not candidate and lines:
         candidate = lines[0]
 
-    # 4. Normalizar espacios tipográficos no separables
+    # 5. Normalizar espacios tipográficos no separables
     final = (
         candidate.replace('\u202f', ' ')
                  .replace('\xa0', ' ')
@@ -70,6 +94,7 @@ def clean_translation_text(raw: str) -> str:
                  .strip('*')
     )
     return final
+
 
 class STTTranslator:
     def __init__(self):
@@ -150,10 +175,10 @@ class STTTranslator:
             return text
 
         lang_name = LANGUAGE_NAMES.get(target_lang, target_lang)
-        
-        # ── Sistema de prompts mejorado ──────────────────────────────────────────
-        # Instrucciones específicas para traducción natural y coloquial,
-        # no traducción literal. Adaptación de modismos y expresiones.
+
+        # ── Prompt principal (qwen) ──────────────────────────────────────────────
+        # El texto fuente se envuelve en «guillemets» para que el modelo lo trate
+        # como objeto a traducir, nunca como instrucción dirigida a él.
         system_prompt = (
             f"Eres un intérprete simultáneo profesional de televisión en directo. "
             f"Tu tarea es traducir al {lang_name} de forma completamente natural, "
@@ -164,21 +189,21 @@ class STTTranslator:
             f"3. Si la frase está incompleta (cortada a mitad), tradúcela tal cual sin completarla.\n"
             f"4. Mantén el registro informal/conversacional cuando el original lo sea.\n"
             f"5. Devuelve ÚNICA y EXCLUSIVAMENTE la traducción en una sola línea. "
-            f"Sin comillas, sin explicaciones, sin prefijos."
+            f"Sin comillas, sin explicaciones, sin prefijos, sin notas."
         )
 
         # ── Construir mensajes con ventana de contexto deslizante ───────────────
-        # Las últimas N frases como historial de conversación dan al modelo
-        # contexto para resolver pronombres, verbos e idiomas correctamente
+        # Los textos fuente se envuelven en «» para que el modelo no los interprete
+        # como mensajes de usuario dirigidos a él, sino como contenido a traducir.
         messages = [{"role": "system", "content": system_prompt}]
-        
+
         context_buf = self._get_context_buffer(target_lang)
         for (prev_original, prev_translated) in context_buf:
-            messages.append({"role": "user", "content": prev_original})
+            messages.append({"role": "user",      "content": f"«{prev_original}»"})
             messages.append({"role": "assistant", "content": prev_translated})
-        
-        # Frase actual a traducir
-        messages.append({"role": "user", "content": text})
+
+        # Frase actual a traducir — también entre guillemets
+        messages.append({"role": "user", "content": f"«{text}»"})
 
         if self.groq_client:
             # 1. Intentar con qwen/qwen3.8-27b con ventana de contexto completa
@@ -186,24 +211,35 @@ class STTTranslator:
                 response = await self.groq_client.chat.completions.create(
                     model="qwen/qwen3.8-27b",
                     messages=messages,
-                    temperature=0.1,   # Ligera varianza para naturalidad, sin aleatoriedad excesiva
-                    max_tokens=150,    # Aumentado para frases largas
+                    temperature=0.1,
+                    max_tokens=150,
                 )
                 raw = response.choices[0].message.content
                 if raw:
                     result = clean_translation_text(raw)
                     if result:
-                        # Guardar en contexto para la próxima frase
                         self._push_context(target_lang, text, result)
                         return result
             except Exception as e:
                 logger.warning(f"[Translation Groq Qwen Fallback {target_lang}]: {e}")
 
-            # 2. Respaldo con allam-2-7b — también pasa el contexto deslizante
+            # 2. Respaldo con allam-2-7b ─────────────────────────────────────────
+            # allam-2-7b es un modelo pequeño que no maneja bien el contexto
+            # conversacional multi-turno. Se usa un prompt único muy directo y
+            # sin historial para evitar que interprete el contenido como chat.
             try:
+                allam_prompt = (
+                    f"Translate the following text from English to {lang_name}. "
+                    f"Output ONLY the translation, nothing else. "
+                    f"No notes, no explanations, no brackets. Just the translation.\n\n"
+                    f"Text: {text}\n\nTranslation:"
+                )
+                allam_messages = [
+                    {"role": "user", "content": allam_prompt}
+                ]
                 response = await self.groq_client.chat.completions.create(
                     model="allam-2-7b",
-                    messages=messages,
+                    messages=allam_messages,
                     temperature=0.1,
                     max_tokens=150,
                 )
@@ -215,6 +251,7 @@ class STTTranslator:
                         return result
             except Exception as e2:
                 logger.warning(f"[Translation Groq Allam Fallback {target_lang}]: {e2}")
+
 
         return text
 
