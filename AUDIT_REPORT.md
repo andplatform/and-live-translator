@@ -1,6 +1,6 @@
 # 📋 Certificación y Auditoría Exhaustiva de Producción
 
-- **Fecha y Hora:** 2026-09-03 01:15:37
+- **Fecha y Hora:** 2026-09-22 21:16:55
 - **Plataforma:** Windows (Python 3.11.15)
 - **Servicio:** AND Live Translator (vMix Broadcast Edition)
 
@@ -12,8 +12,8 @@
 |---|---|---|---|---|
 | 1 | VAD Acústico y Silencios | ad_chunker.py | ✅ PASÓ | Discriminación limpia sin ruido |
 | 2 | Enumeración Audio I/O | ad_chunker.py | ✅ PASÓ | 11 In / 10 Out detectados |
-| 3 | Traducción Concurrente (4 Idiomas) | stt_translator.py | ✅ PASÓ | **1396 ms** (Cero fugas de razonamiento) |
-| 4 | Síntesis Neural Real (TTS) | 	ts_player.py | ✅ PASÓ | **2773 ms** (65088 muestras @ 24000Hz) |
+| 3 | Traducción Concurrente (4 Idiomas) | stt_translator.py | ✅ PASÓ | **238 ms** (Cero fugas de razonamiento) |
+| 4 | Síntesis Neural Real (TTS) | 	ts_player.py | ✅ PASÓ | **2534 ms** (65088 muestras @ 24000Hz) |
 | 5 | Persistencia de Configuración | config.py | ✅ PASÓ | config.json activo |
 | 6 | Conector API vMix | mix_client.py | ✅ PASÓ | Tolerancia y parseo verificados |
 

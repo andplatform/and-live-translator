@@ -1,4 +1,4 @@
-﻿import io
+import io
 import re
 import time
 import logging
@@ -47,7 +47,6 @@ def clean_translation_text(raw: str) -> str:
     lines = [l.strip() for l in cleaned.split("\n") if l.strip()]
     candidate = ""
     for line in lines:
-        # Remover prefijos como 'Traduction:', '**Traduction**:', 'Traducción:'
         clean_line = re.sub(r'^(\*\*|#)*\s*(traduction|traducción|translation|übersetzung)\s*(\*\*|#)*\s*[:\-\*]*\s*', '', line, flags=re.IGNORECASE).strip()
         if clean_line and not clean_line.startswith("**") and not clean_line.startswith("#"):
             candidate = clean_line
@@ -70,6 +69,8 @@ def clean_translation_text(raw: str) -> str:
 class STTTranslator:
     def __init__(self):
         self.groq_client = None
+        self._last_partial_text = ""
+        self._last_partial_translations = {}
         
         if settings.groq_api_key:
             try:
@@ -79,8 +80,11 @@ class STTTranslator:
             except Exception as e:
                 logger.warning(f"No se pudo inicializar Groq: {e}")
 
+    def reset_partial_cache(self):
+        self._last_partial_text = ""
+        self._last_partial_translations = {}
+
     def _audio_to_wav_bytes(self, audio_data: np.ndarray, sample_rate: int = 16000) -> bytes:
-        # Conversión directa Float32 a Int16 preservando headroom natural (sin amplificar ruido de fondo)
         scaled = np.clip(audio_data * 32767.0, -32768, 32767).astype(np.int16)
         buffer = io.BytesIO()
         wavfile.write(buffer, sample_rate, scaled)
@@ -88,7 +92,7 @@ class STTTranslator:
         return buffer.read()
 
     async def transcribe(self, audio_chunk: np.ndarray, sample_rate: int = 16000) -> str:
-        if len(audio_chunk) < sample_rate * 0.4:
+        if len(audio_chunk) < sample_rate * 0.35:
             return ""
 
         wav_bytes = self._audio_to_wav_bytes(audio_chunk, sample_rate)
@@ -129,7 +133,7 @@ class STTTranslator:
         if self.groq_client:
             try:
                 response = await self.groq_client.chat.completions.create(
-                    model="groq/compound",
+                    model="qwen/qwen3.8-27b",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": text}
@@ -164,22 +168,49 @@ class STTTranslator:
     async def translate(self, text: str) -> str:
         return await self.translate_to_lang(text, settings.target_lang)
 
+    async def process_partial_chunk(self, audio_chunk: np.ndarray, target_langs: list[str], sample_rate: int = 16000) -> dict:
+        """Procesa un fragmento provisional de audio en curso para subtitulado palabra a palabra."""
+        original_text = await self.transcribe(audio_chunk, sample_rate)
+        if not original_text or len(original_text) < 2:
+            return {"original": "", "translations": {}, "is_partial": True}
+
+        # Si el texto parcial no ha cambiado respecto al slice anterior, reusar cache
+        if original_text == self._last_partial_text:
+            return {
+                "original": original_text,
+                "translations": self._last_partial_translations,
+                "is_partial": True
+            }
+
+        self._last_partial_text = original_text
+        translations = await self.translate_multi(original_text, target_langs)
+        self._last_partial_translations = translations
+
+        return {
+            "original": original_text,
+            "translations": translations,
+            "is_partial": True
+        }
+
     async def process_chunk_multi(self, audio_chunk: np.ndarray, target_langs: list[str], sample_rate: int = 16000) -> dict:
+        """Procesa el chunk final consolidado."""
+        self.reset_partial_cache()
         t0 = time.perf_counter()
         original_text = await self.transcribe(audio_chunk, sample_rate)
         if not original_text:
-            return {"original": "", "translations": {}, "latency_ms": 0}
+            return {"original": "", "translations": {}, "latency_ms": 0, "is_partial": False}
 
         translations = await self.translate_multi(original_text, target_langs)
         t1 = time.perf_counter()
         latency_ms = int((t1 - t0) * 1000)
 
         primary_translated = translations.get(settings.target_lang, next(iter(translations.values()), original_text))
-        logger.info(f"[{latency_ms}ms] '{original_text}' -> {translations}")
+        logger.info(f"[{latency_ms}ms FINAL] '{original_text}' -> {translations}")
 
         return {
             "original": original_text,
             "translations": translations,
             "translated": primary_translated,
-            "latency_ms": latency_ms
+            "latency_ms": latency_ms,
+            "is_partial": False
         }

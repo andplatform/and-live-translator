@@ -18,6 +18,7 @@
       --danger: #ef4444;
       --warning: #f59e0b;
       --orange: #ff6b00;
+      --cyan: #00f0ff;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -218,9 +219,48 @@
       transition: width 0.08s ease-out;
       border-radius: 5px;
     }
+
+    /* Live Speech Banner (Streaming Partials) */
+    .live-partial-banner {
+      background: rgba(0, 240, 255, 0.08);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      display: none;
+      align-items: baseline;
+      gap: 8px;
+      animation: pulseBorder 1.5s infinite alternate;
+    }
+    .live-partial-banner.active {
+      display: flex;
+    }
+    @keyframes pulseBorder {
+      0% { border-color: rgba(0, 240, 255, 0.2); }
+      100% { border-color: rgba(0, 240, 255, 0.6); }
+    }
+    .partial-tag {
+      font-size: 10px;
+      font-weight: 700;
+      color: #070a12;
+      background: var(--cyan);
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      flex-shrink: 0;
+    }
+    .partial-text {
+      color: #ffffff;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     
     .log-box {
-      height: 520px;
+      height: 500px;
       overflow-y: auto;
       background: #090e1a;
       border: 1px solid var(--border);
@@ -295,7 +335,7 @@
       <img src="/assets/avatar.jpg" alt="Logo" onerror="this.style.display='none'">
       <div>
         <h1>🎙️ AND Live Translator</h1>
-        <span style="font-size: 12px; color: var(--text-dim);">Multi-Channel Broadcast Edition • vMix & OBS</span>
+        <span style="font-size: 12px; color: var(--text-dim);">Streaming Broadcast Edition • Subtítulos en Tiempo Real y Doblaje</span>
       </div>
     </div>
     <div class="header-badges">
@@ -423,6 +463,13 @@
           <span>Monitor Multi-Canal en Directo</span>
           <span id="phraseCounter" style="font-size: 11px; color: var(--text-dim); text-transform: none;">0 frases procesadas</span>
         </h2>
+
+        <!-- Banner de habla activa en tiempo real (Partials) -->
+        <div id="partialBanner" class="live-partial-banner">
+          <span class="partial-tag">⚡ En Directo</span>
+          <span id="partialText" class="partial-text">...</span>
+        </div>
+
         <div id="logBox" class="log-box" style="flex: 1;">
           <div style="color: var(--text-dim); text-align: center; margin-top: 220px;">
             Esperando señal acústica del orador...
@@ -444,6 +491,8 @@
     const vuBar = document.getElementById("vuBar");
     const vuValue = document.getElementById("vuValue");
     const vmixInputsDropdown = document.getElementById("vmixInputsDropdown");
+    const partialBanner = document.getElementById("partialBanner");
+    const partialText = document.getElementById("partialText");
     
     let totalPhrases = 0;
     let hasEntries = false;
@@ -485,7 +534,7 @@
         data.inputs.forEach(d => {
           const opt = document.createElement("option");
           opt.value = d.id;
-          opt.textContent = [] ;
+          opt.textContent = "[" + d.id + "] " + d.name;
           if (String(data.current_input) === String(d.id) || String(data.current_input) === d.name) {
             opt.selected = true;
           }
@@ -497,7 +546,7 @@
         data.outputs.forEach(d => {
           const opt = document.createElement("option");
           opt.value = d.id;
-          opt.textContent = [] ;
+          opt.textContent = "[" + d.id + "] " + d.name;
           if (String(data.current_output) === String(d.id) || String(data.current_output) === d.name) {
             opt.selected = true;
           }
@@ -515,7 +564,7 @@
           data.inputs.forEach(inp => {
             const opt = document.createElement("option");
             opt.value = inp.title || inp.shortTitle || inp.number;
-            opt.textContent = []  ();
+            opt.textContent = "[" + inp.number + "] " + (inp.title || inp.shortTitle) + " (" + inp.type + ")";
             if (inp.title === document.getElementById("vmixInputName").value) {
               opt.selected = true;
             }
@@ -633,6 +682,7 @@
       hasEntries = false;
       totalPhrases = 0;
       phraseCounter.textContent = "0 frases procesadas";
+      partialBanner.classList.remove("active");
     }
 
     function connectWs() {
@@ -650,13 +700,20 @@
             return;
           }
 
+          if (data.type === "partial") {
+            partialBanner.classList.add("active");
+            partialText.textContent = data.translated || data.original;
+            return;
+          }
+
           if (data.type === "translation") {
+            partialBanner.classList.remove("active");
             if (!hasEntries) {
               logBox.innerHTML = "";
               hasEntries = true;
             }
             totalPhrases++;
-            phraseCounter.textContent = ${totalPhrases} frases procesadas;
+            phraseCounter.textContent = totalPhrases + " frases procesadas";
 
             const item = document.createElement("div");
             item.className = "log-item";
@@ -665,30 +722,26 @@
             if (data.translations && Object.keys(data.translations).length > 0) {
               for (const [l, text] of Object.entries(data.translations)) {
                 const isPrimary = l === "es";
-                translationsHtml += 
-                  <div class="trans-row ">
-                    <span class="trans-code"></span>
-                    <span class="trans-text"></span>
-                  </div>
-                ;
+                translationsHtml += '<div class="trans-row ' + (isPrimary ? 'primary' : '') + '">' +
+                  '<span class="trans-code">' + l + '</span>' +
+                  '<span class="trans-text">' + text + '</span>' +
+                  '</div>';
               }
             } else {
-              translationsHtml = <div class="trans-row primary"><span class="trans-code">es</span><span class="trans-text"></span></div>;
+              translationsHtml = '<div class="trans-row primary"><span class="trans-code">es</span><span class="trans-text">' + (data.translated || "") + '</span></div>';
             }
 
-            item.innerHTML = 
-              <div class="log-meta">
-                <span>🕒 </span>
-                <span>⚡  ms</span>
-              </div>
-              <div class="log-orig">🗣️ Original: </div>
-              <div class="log-translations-grid">
-                
-              </div>
-            ;
+            item.innerHTML = '<div class="log-meta">' +
+              '<span>🕒 ' + new Date().toLocaleTimeString() + '</span>' +
+              '<span>⚡ ' + data.latency_ms + ' ms</span>' +
+              '</div>' +
+              '<div class="log-orig">🗣️ Original: ' + data.original + '</div>' +
+              '<div class="log-translations-grid">' +
+              translationsHtml +
+              '</div>';
             logBox.appendChild(item);
             logBox.scrollTop = logBox.scrollHeight;
-            latencyDisplay.textContent = ⏱️ Latencia:  ms;
+            latencyDisplay.textContent = "⏱️ Latencia: " + data.latency_ms + " ms";
           }
         } catch (e) {}
       };

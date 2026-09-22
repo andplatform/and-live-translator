@@ -44,17 +44,18 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(client.ws)
 
-    async def broadcast_translations(self, original: str, translations: dict[str, str], latency_ms: int):
+    async def broadcast_translations(self, original: str, translations: dict[str, str], latency_ms: int, is_partial: bool = False):
         for client in list(self.clients):
             try:
                 translated = translations.get(client.lang, translations.get(settings.target_lang, original))
                 msg = {
-                    "type": "translation",
+                    "type": "partial" if is_partial else "translation",
                     "original": original,
                     "translated": translated,
                     "translations": translations,
                     "lang": client.lang,
                     "dual": client.dual,
+                    "is_partial": is_partial,
                     "latency_ms": latency_ms
                 }
                 await client.ws.send_json(msg)
@@ -80,37 +81,44 @@ chunker = VADAudioChunker(device_index=settings.input_device, vu_callback=on_vu_
 background_task = None
 
 async def audio_processing_loop():
-    logger.info("Iniciando bucle de captura y procesamiento multi-idioma...")
+    logger.info("Iniciando bucle de captura y streaming de subtitulos (partials + final)...")
     try:
         await chunker.start()
-        async for chunk in chunker.speech_chunks():
+        async for chunk, is_final in chunker.speech_events():
             needed_langs = set(settings.active_target_languages)
             for c in ws_manager.clients:
                 if c.lang:
                     needed_langs.add(c.lang)
 
-            res = await translator.process_chunk_multi(chunk, list(needed_langs), sample_rate=chunker.sample_rate)
-            original = res["original"]
-            translations = res["translations"]
-            latency_ms = res["latency_ms"]
+            if not is_final:
+                # Streaming Partial en curso (palabra a palabra)
+                res = await translator.process_partial_chunk(chunk, list(needed_langs), sample_rate=chunker.sample_rate)
+                if res.get("original") and res.get("translations"):
+                    await ws_manager.broadcast_translations(res["original"], res["translations"], latency_ms=90, is_partial=True)
+            else:
+                # Frase Final Consolidada tras silencio
+                res = await translator.process_chunk_multi(chunk, list(needed_langs), sample_rate=chunker.sample_rate)
+                original = res["original"]
+                translations = res["translations"]
+                latency_ms = res["latency_ms"]
 
-            if not original or not translations:
-                continue
+                if not original or not translations:
+                    continue
 
-            await ws_manager.broadcast_translations(original, translations, latency_ms)
+                await ws_manager.broadcast_translations(original, translations, latency_ms, is_partial=False)
 
-            primary_text = translations.get(settings.target_lang, next(iter(translations.values()), original))
-            if settings.operation_mode in ["all", "subtitles_only"] and settings.vmix_enabled:
-                asyncio.create_task(vmix.set_text(primary_text))
+                primary_text = translations.get(settings.target_lang, next(iter(translations.values()), original))
+                if settings.operation_mode in ["all", "subtitles_only"] and settings.vmix_enabled:
+                    asyncio.create_task(vmix.set_text(primary_text))
 
-            if settings.operation_mode in ["all", "voice_only", "voice_ducking"]:
-                asyncio.create_task(
-                    tts_player.play_voice_or_duck(
-                        primary_text,
-                        original_chunk=chunk,
-                        orig_sample_rate=chunker.sample_rate
+                if settings.operation_mode in ["all", "voice_only", "voice_ducking"]:
+                    asyncio.create_task(
+                        tts_player.play_voice_or_duck(
+                            primary_text,
+                            original_chunk=chunk,
+                            orig_sample_rate=chunker.sample_rate
+                        )
                     )
-                )
 
     except asyncio.CancelledError:
         logger.info("Bucle de audio cancelado.")
@@ -269,7 +277,7 @@ async def test_phrase(data: DryTestPhrase):
     needed_langs = list(set(settings.active_target_languages + [settings.target_lang]))
     translations = await translator.translate_multi(data.text, needed_langs)
     
-    await ws_manager.broadcast_translations(data.text, translations, latency_ms=140)
+    await ws_manager.broadcast_translations(data.text, translations, latency_ms=140, is_partial=False)
 
     primary = translations.get(settings.target_lang, data.text)
     if settings.vmix_enabled:

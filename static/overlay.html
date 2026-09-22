@@ -23,10 +23,10 @@
       -webkit-font-smoothing: antialiased;
     }
     .subtitle-box {
-      max-width: 82%;
+      max-width: 84%;
       background: rgba(8, 12, 22, 0.88);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-left: 6px solid #38bdf8;
       border-radius: 12px;
@@ -34,11 +34,15 @@
       box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
       opacity: 0;
       transform: translateY(16px) scale(0.98);
-      transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .subtitle-box.visible {
       opacity: 1;
       transform: translateY(0) scale(1);
+    }
+    .subtitle-box.is-partial {
+      border-left-color: #00f0ff;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 240, 255, 0.25);
     }
     .subtitle-header {
       display: flex;
@@ -55,6 +59,7 @@
       border-radius: 4px;
       letter-spacing: 0.05em;
       text-transform: uppercase;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
     }
     .badge-lang {
       font-size: 12px;
@@ -70,6 +75,19 @@
       line-height: 1.35;
       text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
       letter-spacing: -0.01em;
+      min-height: 44px;
+    }
+    .typing-cursor {
+      display: inline-block;
+      color: #00f0ff;
+      font-weight: 300;
+      margin-left: 3px;
+      animation: blink 0.7s infinite;
+      text-shadow: 0 0 10px #00f0ff;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
     }
     .subtitle-original {
       margin-top: 6px;
@@ -103,12 +121,17 @@
     const langBadge = document.getElementById("langBadge");
     let hideTimeout = null;
 
-    // Obtener parámetros de la URL (?lang=fr&dual=1)
     const urlParams = new URLSearchParams(window.location.search);
     const targetLang = urlParams.get("lang") || "es";
     const isDual = urlParams.get("dual") === "1" || urlParams.get("dual") === "true";
 
     langBadge.textContent = targetLang.toUpperCase();
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
 
     function connect() {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -118,8 +141,29 @@
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === "translation" && data.translated) {
+          
+          if (data.type === "partial" && data.translated) {
+            // Streaming palabra a palabra con cursor titilante
+            textEl.innerHTML = escapeHtml(data.translated) + '<span class="typing-cursor">▌</span>';
+            box.classList.add("visible");
+            box.classList.add("is-partial");
+
+            if (isDual && data.original) {
+              origEl.textContent = data.original;
+              origEl.classList.add("visible");
+            }
+
+            if (hideTimeout) clearTimeout(hideTimeout);
+            hideTimeout = setTimeout(() => {
+              box.classList.remove("visible");
+              box.classList.remove("is-partial");
+            }, 5000);
+          }
+          else if (data.type === "translation" && data.translated) {
+            // Frase final consolidada
             textEl.textContent = data.translated;
+            box.classList.remove("is-partial");
+            box.classList.add("visible");
 
             if (isDual && data.original) {
               origEl.textContent = data.original;
@@ -128,14 +172,14 @@
               origEl.classList.remove("visible");
             }
 
-            box.classList.add("visible");
-
             if (hideTimeout) clearTimeout(hideTimeout);
             hideTimeout = setTimeout(() => {
               box.classList.remove("visible");
             }, 5000);
-          } else if (data.type === "clear") {
+          }
+          else if (data.type === "clear") {
             box.classList.remove("visible");
+            box.classList.remove("is-partial");
           }
         } catch (e) {}
       };
