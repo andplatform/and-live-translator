@@ -1,14 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>vMix Live Subtitle Overlay</title>
+  <title>AND Live Subtitle Overlay</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       background: transparent;
       overflow: hidden;
@@ -18,176 +15,194 @@
       flex-direction: column;
       justify-content: flex-end;
       align-items: center;
-      padding-bottom: 50px;
+      padding-bottom: 48px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
+
+    /* ── Caja de subtítulo ───────────────────────────────────── */
     .subtitle-box {
-      max-width: 84%;
-      background: rgba(8, 12, 22, 0.88);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      max-width: 88%;
+      min-width: 200px;
+      background: rgba(6, 10, 20, 0.90);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 10px;
       border-left: 6px solid #38bdf8;
-      border-radius: 12px;
-      padding: 16px 28px;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+      padding: 14px 26px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.70);
+
+      /* Oculto por defecto – fade in/out suave */
       opacity: 0;
-      transform: translateY(16px) scale(0.98);
-      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: translateY(10px);
+      transition: opacity 0.28s ease, transform 0.28s ease;
+      pointer-events: none;
     }
     .subtitle-box.visible {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: translateY(0);
     }
-    .subtitle-box.is-partial {
-      border-left-color: #00f0ff;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 240, 255, 0.25);
-    }
-    .subtitle-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-    .badge-live {
-      background: #ef4444;
-      color: #ffffff;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 2px 8px;
-      border-radius: 4px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-    }
-    .badge-lang {
-      font-size: 12px;
-      color: #38bdf8;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
+
+    /* ── Texto principal del subtítulo ───────────────────────── */
     .subtitle-text {
       color: #ffffff;
-      font-size: 32px;
+      font-size: 30px;
       font-weight: 600;
-      line-height: 1.35;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+      line-height: 1.4;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.95);
       letter-spacing: -0.01em;
-      min-height: 44px;
+
+      /* Crossfade del texto: cuando cambia, hace fade out/in */
+      transition: opacity 0.18s ease;
     }
-    .typing-cursor {
-      display: inline-block;
-      color: #00f0ff;
-      font-weight: 300;
-      margin-left: 3px;
-      animation: blink 0.7s infinite;
-      text-shadow: 0 0 10px #00f0ff;
+    .subtitle-text.fading {
+      opacity: 0;
     }
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
+
+    /* ── Texto original (modo dual) ──────────────────────────── */
     .subtitle-original {
-      margin-top: 6px;
-      font-size: 16px;
+      margin-top: 5px;
+      font-size: 15px;
       color: #94a3b8;
       font-style: italic;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      display: none;
+      opacity: 0;
+      height: 0;
+      transition: opacity 0.2s ease, height 0.2s ease;
     }
     .subtitle-original.visible {
-      display: block;
+      opacity: 1;
+      height: 22px;
     }
   </style>
 </head>
 <body>
   <div id="subBox" class="subtitle-box">
-    <div class="subtitle-header">
-      <span class="badge-live">Live</span>
-      <span id="langBadge" class="badge-lang">ESP</span>
-    </div>
-    <div id="subText" class="subtitle-text">Esperando señal...</div>
+    <div id="subText" class="subtitle-text"></div>
     <div id="subOriginal" class="subtitle-original"></div>
   </div>
 
   <script>
-    const box = document.getElementById("subBox");
-    const textEl = document.getElementById("subText");
-    const origEl = document.getElementById("subOriginal");
-    const langBadge = document.getElementById("langBadge");
-    let hideTimeout = null;
+    const box     = document.getElementById("subBox");
+    const textEl  = document.getElementById("subText");
+    const origEl  = document.getElementById("subOriginal");
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetLang = urlParams.get("lang") || "es";
-    const isDual = urlParams.get("dual") === "1" || urlParams.get("dual") === "true";
+    const params     = new URLSearchParams(window.location.search);
+    const targetLang = params.get("lang") || "es";
+    const isDual     = params.get("dual") === "1";
 
-    langBadge.textContent = targetLang.toUpperCase();
+    // ── Cola de subtítulos y control de cadencia ───────────────
+    // Evita que el texto cambie más rápido de lo que el ojo puede leer.
+    // Si llega un subtítulo nuevo antes de MIN_DISPLAY_MS, se encola
+    // y se muestra cuando el anterior lleve suficiente tiempo en pantalla.
 
-    function escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
+    const MIN_DISPLAY_MS = 2200;   // Mínimo que un subtítulo debe estar en pantalla
+    const HIDE_AFTER_MS  = 7000;   // Si no llega nada nuevo, ocultar tras este tiempo
+
+    let queue          = [];       // Frases pendientes de mostrar
+    let isShowing      = false;    // Hay un subtítulo visible ahora mismo
+    let shownAt        = 0;        // Timestamp en que se mostró el actual
+    let hideTimer      = null;
+    let nextTimer      = null;
+
+    function clearTimers() {
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+      if (nextTimer) { clearTimeout(nextTimer); nextTimer = null; }
     }
 
+    // Muestra el texto directamente, con crossfade si ya hay algo visible
+    function displayText(translated, original) {
+      clearTimers();
+
+      const doShow = () => {
+        textEl.textContent = translated;
+        if (isDual && original) {
+          origEl.textContent = original;
+          origEl.classList.add("visible");
+        } else {
+          origEl.classList.remove("visible");
+        }
+        textEl.classList.remove("fading");
+        box.classList.add("visible");
+        isShowing = true;
+        shownAt   = Date.now();
+
+        // Ocultar automáticamente si no llega nada nuevo
+        hideTimer = setTimeout(() => {
+          box.classList.remove("visible");
+          isShowing = false;
+          shownAt   = 0;
+          // Procesar siguiente en cola si hubiera
+          processQueue();
+        }, HIDE_AFTER_MS);
+      };
+
+      if (isShowing) {
+        // Ya hay texto visible → crossfade suave (fade out → cambio → fade in)
+        textEl.classList.add("fading");
+        setTimeout(doShow, 180);
+      } else {
+        doShow();
+      }
+    }
+
+    // Saca el siguiente elemento de la cola respetando MIN_DISPLAY_MS
+    function processQueue() {
+      if (queue.length === 0) return;
+
+      const elapsed = Date.now() - shownAt;
+      const wait    = Math.max(0, MIN_DISPLAY_MS - elapsed);
+
+      nextTimer = setTimeout(() => {
+        const item = queue.shift();
+        if (item) displayText(item.translated, item.original);
+        // Seguir procesando si hay más en la cola
+        if (queue.length > 0) processQueue();
+      }, wait);
+    }
+
+    // Entrada principal: nueva traducción recibida
+    function onNewSubtitle(translated, original) {
+      const elapsed = Date.now() - shownAt;
+
+      if (!isShowing || elapsed >= MIN_DISPLAY_MS) {
+        // Se puede mostrar inmediatamente
+        queue = [];   // Descartamos cola vieja (ya tenemos frase más reciente)
+        displayText(translated, original);
+      } else {
+        // El actual lleva poco tiempo → encolar (solo guardamos el más reciente)
+        queue = [{ translated, original }];
+        // Si no hay nextTimer activo, programamos el relevo
+        if (!nextTimer) processQueue();
+      }
+    }
+
+    // ── WebSocket ──────────────────────────────────────────────
     function connect() {
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = proto + "//" + window.location.host + "/ws?lang=" + encodeURIComponent(targetLang) + "&dual=" + (isDual ? "1" : "0");
-      const ws = new WebSocket(wsUrl);
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const url   = proto + "//" + location.host + "/ws?lang=" + encodeURIComponent(targetLang) + "&dual=" + (isDual ? "1" : "0");
+      const ws    = new WebSocket(url);
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
-          if (data.type === "partial" && data.translated) {
-            // Streaming palabra a palabra con cursor titilante
-            textEl.innerHTML = escapeHtml(data.translated) + '<span class="typing-cursor">▌</span>';
-            box.classList.add("visible");
-            box.classList.add("is-partial");
-
-            if (isDual && data.original) {
-              origEl.textContent = data.original;
-              origEl.classList.add("visible");
-            }
-
-            if (hideTimeout) clearTimeout(hideTimeout);
-            hideTimeout = setTimeout(() => {
-              box.classList.remove("visible");
-              box.classList.remove("is-partial");
-            }, 5000);
-          }
-          else if (data.type === "translation" && data.translated) {
-            // Frase final consolidada
-            textEl.textContent = data.translated;
-            box.classList.remove("is-partial");
-            box.classList.add("visible");
-
-            if (isDual && data.original) {
-              origEl.textContent = data.original;
-              origEl.classList.add("visible");
-            } else {
-              origEl.classList.remove("visible");
-            }
-
-            if (hideTimeout) clearTimeout(hideTimeout);
-            hideTimeout = setTimeout(() => {
-              box.classList.remove("visible");
-            }, 5000);
-          }
-          else if (data.type === "clear") {
+          // Aceptamos tanto "translation" como "partial" — ambos tienen `translated`
+          if ((data.type === "translation" || data.type === "partial") && data.translated) {
+            onNewSubtitle(data.translated, data.original || "");
+          } else if (data.type === "clear") {
+            clearTimers();
+            queue = [];
             box.classList.remove("visible");
-            box.classList.remove("is-partial");
+            isShowing = false;
           }
-        } catch (e) {}
+        } catch (_) {}
       };
 
-      ws.onclose = () => {
-        setTimeout(connect, 2000);
-      };
+      ws.onclose = () => setTimeout(connect, 2000);
     }
+
     connect();
   </script>
 </body>
