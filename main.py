@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 from pathlib import Path
 from dataclasses import dataclass
@@ -14,6 +14,7 @@ from vmix_client import VMixClient
 from stt_translator import STTTranslator
 from tts_player import TTSAudioPlayer
 from vad_chunker import VADAudioChunker
+from speaker_detector import SpeakerDetector
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("live_translator")
@@ -44,7 +45,14 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(client.ws)
 
-    async def broadcast_translations(self, original: str, translations: dict[str, str], latency_ms: int):
+    async def broadcast_translations(
+        self,
+        original: str,
+        translations: dict[str, str],
+        latency_ms: int,
+        speaker_id: int = 0,
+        speaker_color: str = "#38bdf8",
+    ):
         for client in list(self.clients):
             try:
                 translated = translations.get(client.lang, translations.get(settings.target_lang, original))
@@ -55,11 +63,14 @@ class ConnectionManager:
                     "translations": translations,
                     "lang": client.lang,
                     "dual": client.dual,
-                    "latency_ms": latency_ms
+                    "latency_ms": latency_ms,
+                    "speaker_id": speaker_id,
+                    "speaker_color": speaker_color,
                 }
                 await client.ws.send_json(msg)
             except Exception:
                 self.disconnect(client.ws)
+
 
 ws_manager = ConnectionManager()
 
@@ -76,6 +87,8 @@ vmix = VMixClient()
 translator = STTTranslator()
 tts_player = TTSAudioPlayer(output_device_name=settings.output_device)
 chunker = VADAudioChunker(device_index=settings.input_device, vu_callback=on_vu_level)
+speaker_detector = SpeakerDetector()
+
 
 background_task = None
 
@@ -97,7 +110,15 @@ async def audio_processing_loop():
             if not original or not translations:
                 continue
 
-            await ws_manager.broadcast_translations(original, translations, latency_ms)
+            # Detectar hablante mediante huella espectral (~5-15ms en CPU)
+            speaker_id, speaker_color = speaker_detector.identify(chunk, sr=chunker.sample_rate)
+            if speaker_id != speaker_detector.last_speaker_id:
+                logger.info(f"[Speaker] Cambio detectado → Hablante {speaker_id} (color {speaker_color})")
+
+            await ws_manager.broadcast_translations(
+                original, translations, latency_ms,
+                speaker_id=speaker_id, speaker_color=speaker_color,
+            )
 
             primary_text = translations.get(settings.target_lang, next(iter(translations.values()), original))
             if settings.operation_mode in ["all", "subtitles_only"] and settings.vmix_enabled:
