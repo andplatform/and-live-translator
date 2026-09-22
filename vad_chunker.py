@@ -1,5 +1,4 @@
 ﻿import asyncio
-import collections
 import logging
 import numpy as np
 import sounddevice as sd
@@ -8,20 +7,18 @@ logger = logging.getLogger("vad_chunker")
 
 class VADAudioChunker:
     """
-    Captura audio en tiempo real y segmenta la voz mediante deteccion de energia / VAD.
-    Soporta emision de eventos incrementales (speech_events):
-      - (chunk_parcial, False) cada ~450ms de habla activa (Streaming Partials)
-      - (chunk_final, True) al detectar silencio o fin de frase.
+    Captura audio en tiempo real y segmenta frases mediante detección de voz (VAD).
+    Diseñado para broadcast: recorta con pausas naturales de respiración (350ms)
+    o fuerza corte máximo a 2.5s para subtitulado continuo sin retrasos.
     """
     def __init__(
         self,
         sample_rate: int = 16000,
         frame_duration_ms: int = 30,
-        silence_threshold_db: float = -42.0,
-        min_silence_duration_ms: int = 400,
-        min_speech_duration_ms: int = 500,
-        max_chunk_duration_s: float = 6.0,
-        partial_interval_ms: int = 450,
+        silence_threshold_db: float = -45.0, # Sensible para capturar audio de móviles o micros a distancia
+        min_silence_duration_ms: int = 350,   # Pausa natural para cerrar frase
+        min_speech_duration_ms: int = 400,    # Descartar chasquidos o ruidos breves
+        max_chunk_duration_s: float = 2.5,    # Máximo 2.5s por frase para latencia ultrabaja
         device_index: int | str = None,
         vu_callback = None
     ):
@@ -31,7 +28,6 @@ class VADAudioChunker:
         self.min_silence_frames = int(min_silence_duration_ms / frame_duration_ms)
         self.min_speech_frames = int(min_speech_duration_ms / frame_duration_ms)
         self.max_chunk_frames = int((max_chunk_duration_s * 1000) / frame_duration_ms)
-        self.partial_interval_frames = max(5, int(partial_interval_ms / frame_duration_ms))
         
         self.device_index = self._parse_device_index(device_index)
         self.vu_callback = vu_callback
@@ -140,16 +136,14 @@ class VADAudioChunker:
                 break
         await self.start()
 
-    async def speech_events(self):
+    async def speech_chunks(self):
         """
-        Generador asíncrono principal que emite tuplas (audio_chunk, is_final).
-        - is_final=False: snapshot de habla en curso (~cada 450ms) para streaming de subtítulos
-        - is_final=True: frase completa consolidada para vMix GT Title y doblaje TTS
+        Emite frases coherentes completas recortadas por pausas de respiración o máximo 2.5s.
+        Garantiza un ritmo constante de subtitulado televisivo sin superar rate-limits.
         """
         buffer = []
         speech_frames = 0
         silence_frames = 0
-        frames_since_partial = 0
         in_speech = False
 
         while self._is_running:
@@ -165,33 +159,28 @@ class VADAudioChunker:
                 in_speech = True
                 silence_frames = 0
                 speech_frames += 1
-                frames_since_partial += 1
                 buffer.append(frame)
 
-                # Emitir snapshot provisional si hay suficiente habla acumulada y ha pasado el intervalo
-                if speech_frames >= self.min_speech_frames and frames_since_partial >= self.partial_interval_frames:
-                    frames_since_partial = 0
-                    partial_chunk = np.concatenate(buffer)
-                    yield (partial_chunk, False)
-
+                # Si se alcanza el límite máximo de duración (2.5s), forzar entrega de subtítulo
+                if len(buffer) >= self.max_chunk_frames and speech_frames >= self.min_speech_frames:
+                    full_chunk = np.concatenate(buffer)
+                    yield full_chunk
+                    buffer = []
+                    speech_frames = 0
+                    silence_frames = 0
+                    in_speech = False
             else:
                 if in_speech:
                     silence_frames += 1
                     buffer.append(frame)
 
-                    if silence_frames >= self.min_silence_frames or len(buffer) >= self.max_chunk_frames:
+                    # Si el silencio supera el umbral de pausa (350ms), cerrar frase
+                    if silence_frames >= self.min_silence_frames:
                         if speech_frames >= self.min_speech_frames:
                             full_chunk = np.concatenate(buffer)
-                            yield (full_chunk, True)
+                            yield full_chunk
                         
                         buffer = []
                         speech_frames = 0
                         silence_frames = 0
-                        frames_since_partial = 0
                         in_speech = False
-
-    async def speech_chunks(self):
-        """Compatibilidad hacia atrás: emite únicamente chunks finales."""
-        async for chunk, is_final in self.speech_events():
-            if is_final:
-                yield chunk

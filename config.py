@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -47,9 +47,9 @@ class TranslatorSettings(BaseModel):
     channels: int = 1
 
     # Languages
-    source_lang: str = Field(default=os.getenv("TRANSLATOR_SOURCE_LANG", "en"))
+    source_lang: str = Field(default=os.getenv("TRANSLATOR_SOURCE_LANG", "auto"))
     target_lang: str = Field(default=os.getenv("TRANSLATOR_TARGET_LANG", "es"))
-    active_target_languages: list[str] = Field(default=["es", "en", "fr", "de"])
+    active_target_languages: list[str] = Field(default=["es"])
 
     # Glossary / Contextual Prompt to eliminate hallucinations
     glossary: list[str] = Field(default=[
